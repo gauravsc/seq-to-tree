@@ -4,7 +4,7 @@ import pickle
 
 
 # read the mesh parent to child file and create the graph
-def create_ontology_tree(file='../../data/bioasq_dataset/MeSH_parent_child_mapping_2017.txt'):
+def create_ontology_tree(file='../data/bioasq_dataset/MeSH_parent_child_mapping_2017.txt'):
 	with open(file, 'r') as fread:
 		lines = fread.readlines()
 
@@ -46,20 +46,24 @@ def get_masking_info(G, mesh_labels, mesh_to_idx, max_seq_len):
 	for mesh_seq in mesh_seqs:
 		mesh_idx_seqs.append([mesh_to_idx[mesh] for mesh in mesh_seq])
 
-	target = [0]*max_seq_len
-	mask = [[] for i in range(max_seq_len)]
-
-	for mesh_idx_seq in mesh_idx_seqs:
+	
+	target_list = []
+	mask_list = []
+	for j, mesh_idx_seq in enumerate(mesh_idx_seqs):
+		target = [0]*max_seq_len
+		mask = [[] for i in range(max_seq_len)]
 		for i, mesh_idx in enumerate(mesh_idx_seq):
 			target[i] = mesh_idx
 			if i-1 >= 0:
 				mask[i] += node_desc[mesh_idx_seq[i-1]]
-				mask[i]
 
-	mask = [list(set(mask_i)) for mask_i in mask]
-	mask = [[v for v in mask[i] if v!= target[i]] for i in range(len(mask))]
+		mask = [list(set(mask_i)) for mask_i in mask]
+		mask = [[v for v in mask[i] if v!= target[i]] for i in range(len(mask))]
 
-	return target, mask
+		target_list.append(target)
+		mask_list.append(mask)
+
+	return target_list, mask_list
 
 def get_semantic_dist(undirG, mesh1, mesh2):
 	try:
