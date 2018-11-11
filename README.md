@@ -1,1 +1,1 @@
-# seq -to-tree
+# seq-to-tree
