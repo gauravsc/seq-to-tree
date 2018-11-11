@@ -41,7 +41,6 @@ def generate_batches():
 				tgt_batch = []
 				masks_batch = []
 
-
 	# write the left over data into file
 	if len(abs_batch) > 0:
 		with open('../data/bioasq_dataset/train_batches/'+str(((i+1)//batch_size) + 1) +'.json','w') as f:
