@@ -1,3 +1,6 @@
+import sys
+sys.path.append('/Users/gauravsc/Code/seq-to-tree/src')
+
 import json
 from utils.mesh_operations import *
 from utils.mesh_tree_operations import *
