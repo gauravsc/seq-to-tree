@@ -7,11 +7,14 @@ from utils.mesh_tree_operations import *
 from model.transformer.Models import *
 from utils.embedding_operations import *
 import pickle
+import torch
+import torch.nn as nn
 
 # global vparameters
 vocab_size = 150000
 src_max_seq_len = 1000
 tgt_max_seq_len = 20
+learning_rate = 0.005
 
 def get_vocab(data_file):
 	data = json.load(open(data_file,'r'))
@@ -101,13 +104,21 @@ def prepare_train_data(minibatch_data, word_to_idx, mesh_to_idx, ontology_idx_tr
 	src_pos = np.vstack(src_pos_list)
 	tgt_seq = np.vstack(tgt_seq_list)
 	tgt_pos = np.vstack(tgt_pos_list)
+	mask_tensor = np.stack(mask_mat_list, axis=0)
+	
+	return src_seq, src_pos, tgt_seq, tgt_pos, mask_tensor
 
 
-	print (src_seq.shape, src_pos.shape, tgt_seq.shape, tgt_pos.shape)
-	print (src_seq[0], tgt_seq[0])
+def batch_one_hot_encode(vector_list, vocab_size):
+	encoded_mat_list = []
+	for vector in vector_list:
+		encoded_mat = np.zeros((vocab_size, len(vector)))
+		encoded_mat[vector, range(len(vector))] = 1.
+		encoded_mat_list.append(encoded_mat)
 
-	return src_seq, src_pos, tgt_seq, tgt_pos, mask_mat_list
+	encoded_tensor = np.stack(encoded_mat_list, axis=0)
 
+	return encoded_tensor
 
 
 
@@ -128,11 +139,11 @@ def main():
 		mesh_vocab[idx] = mesh
 
 
-	# read source word embedding matrix
-	src_emb = read_embeddings('../data/embeddings/word.processed.embeddings', src_vocab)
+	# # read source word embedding matrix
+	# src_emb = read_embeddings('../data/embeddings/word.processed.embeddings', src_vocab)
 
-	# read mesh embedding matrix
-	tgt_emb = read_embeddings('../data/embeddings/mesh.processed.embeddings', mesh_vocab)
+	# # read mesh embedding matrix
+	# tgt_emb = read_embeddings('../data/embeddings/mesh.processed.embeddings', mesh_vocab)
 
 	# create the ontology tree with nodes as idx of the mesh terms
 	ontology_idx_tree = create_idx_ontology_tree()
@@ -140,23 +151,37 @@ def main():
 	print ("Ontolgy tree created with # Nodes: ", len(ontology_idx_tree.nodes()))
 
 
+	# create the model, criterior, optimizer etc
+	transformer = Transformer(len(src_vocab), len(mesh_vocab), src_max_seq_len, tgt_max_seq_len)
+	mseloss = nn.MSELoss(reduction="none")
+	optimizer = torch.optim.Adam(transformer.parameters(), lr=0.005)
 
+
+	# Finally preperation for the training data e.g. source, target and mask
 	for i in range(1,3):
 		minibatch_data = json.load(open('../data/bioasq_dataset/train_batches/'+str(i)+'.json','r'))
-		src_seq, src_pos, tgt_seq, tgt_pos, masks = prepare_train_data(minibatch_data, word_to_idx, mesh_to_idx, ontology_idx_tree, root)
+		src_seq, src_pos, tgt_seq, tgt_pos, mask_tensor = prepare_train_data(minibatch_data, word_to_idx, mesh_to_idx, ontology_idx_tree, root)
+		src_seq = torch.tensor(src_seq)
+		src_pos = torch.tensor(src_pos)
+		tgt_seq = torch.tensor(tgt_seq)
+		tgt_pos = torch.tensor(tgt_pos)
+		mask_tensor = torch.tensor(mask_tensor, dtype=torch.float)
+		# print(src_seq.shape, src_pos.shape, tgt_seq.shape, tgt_pos.shape)
 
+		output = transformer(src_seq, src_pos, tgt_seq, tgt_pos)
+		target = torch.tensor(batch_one_hot_encode(tgt_seq, len(mesh_vocab)), dtype=torch.float)
 
+		loss = mseloss(output, target)
+		loss = loss*mask_tensor
+		loss = torch.sum(loss)/torch.sum(mask_tensor)
 
-	
+		print ("loss: ", loss)
 
-
-	# create the transformer model
-
-
-
-
-
-
+		# back-propagation
+		optimizer.zero_grad()
+		loss.backward()
+		optimizer.step()
+		
 
 
 
