@@ -1,6 +1,6 @@
 import sys
 sys.path.append('/Users/gauravsc/Code/seq-to-tree/src')
-
+import random as rd
 import numpy as np
 import json 
 from utils.mesh_tree_operations import *
@@ -15,6 +15,8 @@ vocab_size = 150000
 src_max_seq_len = 1000
 tgt_max_seq_len = 20
 learning_rate = 0.005
+threshold = 0.1
+
 
 def get_vocab(data_file):
 	data = json.load(open(data_file,'r'))
@@ -87,8 +89,12 @@ def prepare_train_data(minibatch_data, word_to_idx, mesh_to_idx, ontology_idx_tr
 			
 			# create the masking matrix that only computes loss on legitimate children
 			mask_mat[root, 0] = 1
-			for k in range(1, len(tgt)):
+			for k in range(1, len(tgt)+1):
 				child_nodes = list(ontology_idx_tree.successors(tgt[k-1]))
+				
+				# negative sampling 
+				child_nodes = rd.sample(child_nodes, min(3, len(child_nodes)))
+
 				mask_mat[child_nodes, k] = 1
 
 			# mask the active sibling nodes
@@ -121,9 +127,97 @@ def batch_one_hot_encode(vector_list, vocab_size):
 	return encoded_tensor
 
 
+def train(transformer, mseloss, optimizer, ontology_idx_tree, mesh_vocab, word_to_idx, mesh_to_idx, root):
+	# Finally preperation for the training data e.g. source, target and mask
+	for i in range(1,1000):
+		k = rd.randint(1,2)
+		minibatch_data = json.load(open('../data/bioasq_dataset/train_batches/'+str(k)+'.json','r'))
+		src_seq, src_pos, tgt_seq, tgt_pos, mask_tensor = prepare_train_data(minibatch_data, word_to_idx, mesh_to_idx, ontology_idx_tree, root)
+		src_seq = torch.tensor(src_seq)
+		src_pos = torch.tensor(src_pos)
+		tgt_seq = torch.tensor(tgt_seq)
+		tgt_pos = torch.tensor(tgt_pos)
+		mask_tensor = torch.tensor(mask_tensor, dtype=torch.float)
+		# print(src_seq.shape, src_pos.shape, tgt_seq.shape, tgt_pos.shape)
+
+		output = transformer(src_seq, src_pos, tgt_seq, tgt_pos)
+		target = torch.tensor(batch_one_hot_encode(tgt_seq, len(mesh_vocab)), dtype=torch.float)
+
+		loss = mseloss(output, target)
+		loss = loss*mask_tensor
+		loss = torch.sum(loss)/torch.sum(mask_tensor)
+
+		print ("loss: ", loss)
+
+		# back-propagation
+		optimizer.zero_grad()
+		loss.backward()
+		optimizer.step()
+
+	return transformer
+
+
+
+def recursive_decoding(transformer, mesh_idx_seq, src_seq, src_pos, ontology_idx_tree):
+	# obtain the next state based on the previous state of the sequence
+	tgt_seq = np.zeros(tgt_max_seq_len, dtype=int)
+	tgt_seq[:len(mesh_idx_seq)] = mesh_idx_seq
+	tgt_pos = np.zeros(tgt_max_seq_len, dtype=int)
+	tgt_pos[:len(mesh_idx_seq)] = range(1, len(mesh_idx_seq)+1)
+
+	tgt_seq = torch.tensor(tgt_seq.reshape((1,-1)))
+	tgt_pos = torch.tensor(tgt_pos.reshape((1,-1)))
+
+	# get output of the model 
+	output = transformer(src_seq, src_pos, tgt_seq, tgt_pos)
+
+	# get the activated children of the current node
+	legit_children = list(ontology_idx_tree.successors(mesh_idx_seq[-1]))
+	act_nodes = output[0, legit_children, len(mesh_idx_seq)]
+	nxt_nodes = [legit_children[i] for i in range(len(legit_children))  if act_nodes[i] > threshold]
+	
+	if len(nxt_nodes) == 0:
+		return [mesh_idx_seq[-1]]
+
+	pred_mesh_idx = []
+	for node in nxt_nodes:
+		pred_mesh_idx += recursive_decoding(mesh_idx_seq+[node], src_seq, src_pos, ontology_idx_tree)
+
+	return pred_mesh_idx
+
+
+def predict(transformer, ontology_idx_tree, mesh_vocab, word_to_idx, mesh_to_idx, root, test_data):
+	test_data = test_data['documents']
+	
+	# iterate over one document at a time
+	pred_mesh_idx = []
+	for doc in test_data:
+		abstract = doc['abstractText']
+		word_idx_seq = [word_to_idx[word] for word in abstract.lower().strip().split(' ')]
+		src_seq = np.zeros(src_max_seq_len, dtype=int)
+		src_seq[:len(word_idx_seq)] = word_idx_seq
+		src_pos = np.zeros(src_max_seq_len, dtype=int)
+		src_pos[:len(word_idx_seq)] = range(1, len(word_idx_seq)+1)
+
+		# reshape to create batch of size 1
+		src_seq = torch.tensor(src_seq.reshape((1,-1)))
+		src_pos = torch.tensor(src_pos.reshape((1,-1)))
+
+		mesh_idx_seq = [root]
+		pred_mesh_idx.append(recursive_decoding(transformer, mesh_idx_seq, src_seq, src_pos, ontology_idx_tree))
+
+	# print(pred_mesh_idx)
+
+	return pred_mesh_idx
+
+
+
+
+
 
 def main():
 	
+	# location of the toy dataset ---> this needs to be replaced with the final dataset
 	data_file = '../data/bioasq_dataset/toyMeSH_2017.json'
 
 	# create the vocabulary for the input 
@@ -156,32 +250,41 @@ def main():
 	mseloss = nn.MSELoss(reduction="none")
 	optimizer = torch.optim.Adam(transformer.parameters(), lr=0.005)
 
+	# train the model 
+	transformer = train(transformer, mseloss, optimizer, ontology_idx_tree, mesh_vocab, word_to_idx, mesh_to_idx, root)
+	
+	
+	# validate the model
+	val_data_files = ['../data/bioasq_dataset/val_batches/1.json', '../data/bioasq_dataset/val_batches/2.json']
+	transformer = transformer.eval()
+	pred_mesh_idx = []
+	true_mesh_idx = []
+	for data_file in val_data_files:
+		data = json.load(open(data_file,'r'))
+		abstracts = data['abs']
+		tgts = data['tgt']
+		val_data = {"documents":[]}
+		for i in range(len(abstracts)):
+			abstract_text = abstracts[i]
+			mesh_idxs = [seq[-1] for seq in tgts[i]] 
+			val_data['documents'].append({'abstractText': abstract_text})
+			true_mesh_idx.append(mesh_idxs)
 
-	# Finally preperation for the training data e.g. source, target and mask
-	for i in range(1,3):
-		minibatch_data = json.load(open('../data/bioasq_dataset/train_batches/'+str(i)+'.json','r'))
-		src_seq, src_pos, tgt_seq, tgt_pos, mask_tensor = prepare_train_data(minibatch_data, word_to_idx, mesh_to_idx, ontology_idx_tree, root)
-		src_seq = torch.tensor(src_seq)
-		src_pos = torch.tensor(src_pos)
-		tgt_seq = torch.tensor(tgt_seq)
-		tgt_pos = torch.tensor(tgt_pos)
-		mask_tensor = torch.tensor(mask_tensor, dtype=torch.float)
-		# print(src_seq.shape, src_pos.shape, tgt_seq.shape, tgt_pos.shape)
+		pred_mesh_idx += predict(transformer, ontology_idx_tree, mesh_vocab, word_to_idx, mesh_to_idx, root, val_data)
 
-		output = transformer(src_seq, src_pos, tgt_seq, tgt_pos)
-		target = torch.tensor(batch_one_hot_encode(tgt_seq, len(mesh_vocab)), dtype=torch.float)
+	print (true_mesh_idx)
+	print (pred_mesh_idx)
 
-		loss = mseloss(output, target)
-		loss = loss*mask_tensor
-		loss = torch.sum(loss)/torch.sum(mask_tensor)
+	# # test the model
+	# test_data_files = ['../data/bioasq_dataset/Task5a-Batch1-Week1_raw.json']
+	# transformer = transformer.eval()
+	# for data_file in test_data_files:
+	# 	pred_mesh_terms = predict(transformer, ontology_idx_tree, mesh_vocab, word_to_idx, mesh_to_idx, root, data_file)
 
-		print ("loss: ", loss)
 
-		# back-propagation
-		optimizer.zero_grad()
-		loss.backward()
-		optimizer.step()
-		
+
+	
+
 
 
 
