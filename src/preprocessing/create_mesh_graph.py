@@ -9,10 +9,9 @@ with open(file, 'r') as fread:
 lines = [line.strip() for line in lines]
 edges = [line.split(' ') for line in lines]
 
-nodes = sorted(list(set([node for edge in edges for node in edge])))
+nodes = ['$PAD$', "$SOS$"]+sorted(list(set([node for edge in edges for node in edge])))
 mesh_to_idx = {k: v for v, k in enumerate(nodes)}
 edges = [[mesh_to_idx[edge[0]], mesh_to_idx[edge[1]]] for edge in edges]
-
 
 G = nx.DiGraph()
 G.add_edges_from(edges)

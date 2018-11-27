@@ -158,8 +158,8 @@ class Transformer(nn.Module):
     def __init__(
             self,
             n_src_vocab, n_tgt_vocab, src_len_max_seq, tgt_len_max_seq,
-            d_word_vec=128, d_model=128, d_inner=128,
-            n_layers=1, n_head=8, d_k=64, d_v=64, dropout=0.1,
+            d_word_vec=256, d_model=256, d_inner=256,
+            n_layers=2, n_head=8, d_k=64, d_v=64, dropout=0.1,
             tgt_emb_prj_weight_sharing=False,
             emb_src_tgt_weight_sharing=False):
 
@@ -199,11 +199,11 @@ class Transformer(nn.Module):
 
     def forward(self, src_seq, src_pos, tgt_seq, tgt_pos):
 
-        tgt_seq, tgt_pos = tgt_seq[:, :], tgt_pos[:, :]
+        tgt_seq, tgt_pos = tgt_seq[:, :-1], tgt_pos[:, :]
 
         enc_output, *_ = self.encoder(src_seq, src_pos)
         dec_output, *_ = self.decoder(tgt_seq, tgt_pos, src_seq, enc_output)
         seq_logit = self.tgt_word_prj(dec_output) * self.x_logit_scale
-        seq_logit = torch.sigmoid(seq_logit.permute(0,2,1))
+        seq_logit = seq_logit.permute(0,2,1)
         # return seq_logit.view(-1, seq_logit.size(2))
         return seq_logit
