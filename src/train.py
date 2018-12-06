@@ -9,14 +9,14 @@ from utils.embedding_operations import *
 import pickle
 import torch
 import torch.nn as nn
-
+from eval.eval import * 
 # global vparameters
 vocab_size = 150000
 src_max_seq_len = 1000
 tgt_max_seq_len = 20
 learning_rate = 0.005
 threshold = 0.0
-
+n_train_iterations = 200
 
 def get_vocab(data_file):
 	data = json.load(open(data_file,'r'))
@@ -130,7 +130,7 @@ def batch_one_hot_encode(vector_list, vocab_size):
 
 def train(transformer, loss_criterion, optimizer, ontology_idx_tree, mesh_vocab, word_to_idx, mesh_to_idx, root):
 	# Finally preperation for the training data e.g. source, target and mask
-	for i in range(1,10):
+	for i in range(1,n_train_iterations):
 		k = rd.randint(1,2)
 		minibatch_data = json.load(open('../data/bioasq_dataset/train_batches/'+str(k)+'.json','r'))
 		src_seq, src_pos, tgt_seq, tgt_pos, mask_tensor = prepare_train_data(minibatch_data, word_to_idx, mesh_to_idx, ontology_idx_tree, root)
@@ -158,19 +158,19 @@ def train(transformer, loss_criterion, optimizer, ontology_idx_tree, mesh_vocab,
 
 		print ("loss: ", loss)
 
-		idx_to_monitor = np.where(mask_tensor[0, :, 3]==1)[0]
+		# idx_to_monitor = np.where(mask_tensor[0, :, 3]==1)[0]
 
-		# print (tgt_seq[0, :])
-		print (target[0, idx_to_monitor, 3])
-		print (output[0, idx_to_monitor, 3])
+		# # print (tgt_seq[0, :])
+		# print (target[0, idx_to_monitor, 3])
+		# print (output[0, idx_to_monitor, 3])
 
 		# back-propagation
 		optimizer.zero_grad()
 		loss.backward()
 		optimizer.step()
 
-		output = transformer(src_seq, src_pos, tgt_seq, tgt_pos)
-		print (output[0, idx_to_monitor, 3])
+		# output = transformer(src_seq, src_pos, tgt_seq, tgt_pos)
+		# print (output[0, idx_to_monitor, 3])
 
 
 	return transformer
@@ -270,7 +270,8 @@ def main():
 
 
 	# create the model, criterior, optimizer etc
-	transformer = Transformer(len(src_vocab), len(mesh_vocab), src_max_seq_len, tgt_max_seq_len)
+	transformer = Transformer(len(src_vocab), len(mesh_vocab), src_max_seq_len, tgt_max_seq_len, d_word_vec=128, d_model=128, d_inner=256,
+            n_layers=2, n_head=8, d_k=128, d_v=128, dropout=0.1)
 	# mseloss = nn.MSELoss(reduction="none")
 	# loss_criterion= nn.BCELoss(reduction="none")
 	loss_criterion = torch.nn.BCEWithLogitsLoss(reduction="none")
@@ -300,8 +301,20 @@ def main():
 
 		pred_mesh_idx += predict(transformer, ontology_idx_tree, mesh_vocab, word_to_idx, mesh_to_idx, root, val_data)
 
+
+
+
 	print (true_mesh_idx)
 	print (pred_mesh_idx)
+	f1_scores_list = []
+	print ("\n Evaluation on the dev set")
+	for true_labels, pred_labels in zip(true_mesh_idx, pred_mesh_idx):
+		f1_scores_list.append(f1_score(true_labels, pred_labels))
+
+
+	print ("f1 score: ", np.mean(f1_scores_list))
+
+
 
 	# # test the model
 	# test_data_files = ['../data/bioasq_dataset/Task5a-Batch1-Week1_raw.json']

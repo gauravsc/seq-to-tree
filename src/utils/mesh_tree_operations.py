@@ -104,5 +104,28 @@ def get_legitimate_active_children(G, mesh_term):
 	return all_children
 
 
+def remove_redundant_mesh_terms(G, mesh_labels):
+	mesh_seqs = []
+	for mesh_label in mesh_labels:
+		mesh_seqs.append(get_path_from_root(G, mesh_label))
+
+	node_outdegrees = {}
+	for mesh_seq in mesh_seqs:
+		for mesh in mesh_seq:
+			node_outdegrees[mesh] = 0
+
+	for mesh_seq in mesh_seqs:
+		for i in range(len(mesh_seq)-1):
+			node_outdegrees[mesh_seq[i]] += 1
+
+	cleaned_mesh_labels = []
+	for mesh_seq in mesh_seqs:
+		if node_outdegrees[mesh_seq[-1]] == 0:
+			cleaned_mesh_labels.append(mesh_seq[-1])
+
+	return cleaned_mesh_labels
+
+
+
 
 
