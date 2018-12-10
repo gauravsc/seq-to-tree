@@ -7,9 +7,7 @@ from utils.mesh_tree_operations import *
 
 
 max_seq_len = 20
-batch_size = 2
-
-
+batch_size = 200
 
 
 # generatie batches and write them to a file

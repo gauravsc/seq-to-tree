@@ -1,5 +1,6 @@
 import sys
-# sys.path.append('/Users/gauravsc/Code/seq-to-tree/src')
+import os
+import os.path
 import random as rd
 import numpy as np
 import json 
@@ -10,15 +11,23 @@ import pickle
 import torch
 import torch.nn as nn
 from eval.eval import * 
+
 # global vparameters
 vocab_size = 150000
 src_max_seq_len = 1000
 tgt_max_seq_len = 20
 learning_rate = 0.005
 threshold = 0.0
-n_train_iterations = 200
+n_train_iterations = 1400
+save_model = True
+load_model = True
 
 def get_vocab(data_file):
+
+	if os.path.isfile('../data/english_vocab.pkl'):
+		vocab, word_to_ind = pickle.load(open('../data/english_vocab.pkl','r'))
+		return vocab, word_to_ind
+
 	data = json.load(open(data_file,'r'))
 	records = data['articles']
 	
@@ -46,6 +55,8 @@ def get_vocab(data_file):
 	word_to_ind = {}
 	for i, word in enumerate(vocab):
 		word_to_ind[word] = i
+
+	pickle.dump((vocab, word_to_ind), open('../data/english_vocab.pkl','w'))
 
 	return vocab, word_to_ind
 
@@ -130,9 +141,11 @@ def batch_one_hot_encode(vector_list, vocab_size):
 
 def train(transformer, loss_criterion, optimizer, ontology_idx_tree, mesh_vocab, word_to_idx, mesh_to_idx, root):
 	# Finally preperation for the training data e.g. source, target and mask
+	# Get a list of all the batch files 
+	files = os.listdir('../data/bioasq_dataset/train_batches/')
 	for i in range(1,n_train_iterations):
-		k = rd.randint(1,2)
-		minibatch_data = json.load(open('../data/bioasq_dataset/train_batches/'+str(k)+'.json','r'))
+		file = rd.choice(files)
+		minibatch_data = json.load(open('../data/bioasq_dataset/train_batches/'+file,'r'))
 		src_seq, src_pos, tgt_seq, tgt_pos, mask_tensor = prepare_train_data(minibatch_data, word_to_idx, mesh_to_idx, ontology_idx_tree, root)
 		src_seq = torch.tensor(src_seq)
 		src_pos = torch.tensor(src_pos)
@@ -279,9 +292,15 @@ def main():
 
 	# train the model 
 	transformer = train(transformer, loss_criterion, optimizer, ontology_idx_tree, mesh_vocab, word_to_idx, mesh_to_idx, root)
-	# torch.save(transformer.state_dict(), '../saved_models/model.pt')
+	
+	# save the learned model
+	if save_model:
+		torch.save(transformer.state_dict(), '../saved_models/model.pt')
 
-	# transformer.load_state_dict(torch.load('../saved_models/model.pt'))
+
+	# load the saved model
+	if load_model:
+		transformer.load_state_dict(torch.load('../saved_models/model.pt'))
 	
 	# validate the model
 	val_data_files = ['../data/bioasq_dataset/val_batches/1.json', '../data/bioasq_dataset/val_batches/2.json']
@@ -302,10 +321,10 @@ def main():
 		pred_mesh_idx += predict(transformer, ontology_idx_tree, mesh_vocab, word_to_idx, mesh_to_idx, root, val_data)
 
 
-
-
+	pred_mesh_idx = [list(set(pred_labels))  for pred_labels in pred_mesh_idx]
 	print (true_mesh_idx)
 	print (pred_mesh_idx)
+
 	f1_scores_list = []
 	print ("\n Evaluation on the dev set")
 	for true_labels, pred_labels in zip(true_mesh_idx, pred_mesh_idx):
