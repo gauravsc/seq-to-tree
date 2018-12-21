@@ -49,14 +49,20 @@ def create_idx_ontology_tree(file='../data/bioasq_dataset/MeSH_parent_child_mapp
 
 
 def get_path_from_root(G, node, root='MeSH'):
-	path = list(nx.all_simple_paths(G, root, node))[0]
+	try:
+		path = list(nx.all_simple_paths(G, root, node))[0]
+	except IndexError:
+		path = []
+
 	return path
 
 
-def get_masking_info(G, mesh_labels, mesh_to_idx, max_seq_len):
+
+def get_masking_info(G, mesh_labels, mesh_to_idx, max_seq_len, paths_from_root):
 	mesh_seqs = []
 	for mesh_label in mesh_labels:
-		mesh_seqs.append(get_path_from_root(G, mesh_label))
+		mesh_seqs.append(paths_from_root[mesh_label])
+		# mesh_seqs.append(get_path_from_root(G, mesh_label))
 
 	# with open('../../data/mesh_to_idx.pkl', 'rb') as fread:
 	# 	mesh_to_idx = pickle.load(fread)
@@ -72,7 +78,6 @@ def get_masking_info(G, mesh_labels, mesh_to_idx, max_seq_len):
 	for mesh_seq in mesh_seqs:
 		mesh_idx_seqs.append([mesh_to_idx[mesh] for mesh in mesh_seq])
 
-	
 	target_list = []
 	mask_list = []
 	for j, mesh_idx_seq in enumerate(mesh_idx_seqs):
@@ -104,10 +109,11 @@ def get_legitimate_active_children(G, mesh_term):
 	return all_children
 
 
-def remove_redundant_mesh_terms(G, mesh_labels):
+def remove_redundant_mesh_terms(G, mesh_labels, paths_from_root):
 	mesh_seqs = []
 	for mesh_label in mesh_labels:
-		mesh_seqs.append(get_path_from_root(G, mesh_label))
+		mesh_seqs.append(paths_from_root[mesh_label])
+		# mesh_seqs.append(get_path_from_root(G, mesh_label))
 
 	node_outdegrees = {}
 	for mesh_seq in mesh_seqs:

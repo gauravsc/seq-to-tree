@@ -72,7 +72,6 @@ def prepare_train_data(minibatch_data, word_to_idx, mesh_to_idx, ontology_idx_tr
 	tgt_pos_list = []
 	mask_mat_list = []
 
-
 	for i, abst in enumerate(abstracts):
 		word_seq = abst.lower().strip().split(' ')
 		idx_seq = [word_to_idx[word] if word in word_to_idx else word_to_idx['unk'] for word in word_seq]
@@ -143,8 +142,7 @@ def train(transformer, loss_criterion, optimizer, ontology_idx_tree, mesh_vocab,
 	# Finally preperation for the training data e.g. source, target and mask
 	# Get a list of all the batch files 
 	files = os.listdir('../data/bioasq_dataset/train_batches/')
-	for i in range(1,n_train_iterations):
-		file = rd.choice(files)
+	for file in files:
 		minibatch_data = json.load(open('../data/bioasq_dataset/train_batches/'+file,'r'))
 		src_seq, src_pos, tgt_seq, tgt_pos, mask_tensor = prepare_train_data(minibatch_data, word_to_idx, mesh_to_idx, ontology_idx_tree, root)
 		src_seq = torch.tensor(src_seq)
