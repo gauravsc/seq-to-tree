@@ -13,7 +13,7 @@ import torch.nn as nn
 from eval.eval import * 
 
 # global vparameters
-vocab_size = 150000
+vocab_size = 250000
 src_max_seq_len = 1000
 tgt_max_seq_len = 20
 learning_rate = 0.005
@@ -21,6 +21,8 @@ threshold = 0.0
 n_train_iterations = 1400
 save_model = True
 load_model = True
+batch_size = 6
+device = torch.device("cuda:0")
 
 def get_vocab(data_file):
 
@@ -143,45 +145,60 @@ def train(transformer, loss_criterion, optimizer, ontology_idx_tree, mesh_vocab,
 	# Get a list of all the batch files 
 	files = os.listdir('../data/bioasq_dataset/train_batches/')
 	for file in files:
-		minibatch_data = json.load(open('../data/bioasq_dataset/train_batches/'+file,'r'))
-		src_seq, src_pos, tgt_seq, tgt_pos, mask_tensor = prepare_train_data(minibatch_data, word_to_idx, mesh_to_idx, ontology_idx_tree, root)
-		src_seq = torch.tensor(src_seq)
-		src_pos = torch.tensor(src_pos)
-		tgt_seq = torch.tensor(tgt_seq)
-		tgt_pos = torch.tensor(tgt_pos)
-		mask_tensor = torch.tensor(mask_tensor, dtype=torch.float)
-		# print(src_seq.shape, src_pos.shape, tgt_seq.shape, tgt_pos.shape)
+		file_data = json.load(open('../data/bioasq_dataset/train_batches/'+file,'r'))
+		file_size = len(file_data['abs'])
 
-		target = torch.tensor(batch_one_hot_encode(tgt_seq, len(mesh_vocab)), dtype=torch.float)
+		i = 0
+		while i <  file_size:
+			minibatch_data = {'abs': file_data['abs'][i:i+batch_size], 
+			'tgt': file_data['tgt'][i:i+batch_size], 'mask':file_data['mask'][i:i+batch_size]}
+			
+			src_seq, src_pos, tgt_seq, tgt_pos, mask_tensor = prepare_train_data(minibatch_data, word_to_idx, mesh_to_idx, ontology_idx_tree, root)
+			src_seq = torch.tensor(src_seq)
+			src_pos = torch.tensor(src_pos)
+			tgt_seq = torch.tensor(tgt_seq)
+			tgt_pos = torch.tensor(tgt_pos)
+			mask_tensor = torch.tensor(mask_tensor, dtype=torch.float)
+			# print(src_seq.shape, src_pos.shape, tgt_seq.shape, tgt_pos.shape)
 
-		# shift the sequence of target nodes by one right
-		zero_col = torch.ones(tgt_seq.shape[0], 1, dtype=torch.long)
-		tgt_seq = torch.cat((zero_col, tgt_seq), dim=1)
+			target = torch.tensor(batch_one_hot_encode(tgt_seq, len(mesh_vocab)), dtype=torch.float)
 
-		# print (tgt_seq[0, :])
-		# print (tgt_pos[0, :])
+			# shift the sequence of target nodes by one right
+			zero_col = torch.ones(tgt_seq.shape[0], 1, dtype=torch.long)
+			tgt_seq = torch.cat((zero_col, tgt_seq), dim=1)
 
-		output = transformer(src_seq, src_pos, tgt_seq, tgt_pos)
+			# print (tgt_seq[0, :])
+			# print (tgt_pos[0, :])
 
-		loss = loss_criterion(output, target)
-		loss = loss*mask_tensor
-		loss = torch.sum(loss)/torch.sum(mask_tensor)
+			# copy tensors to the gpu device where the model is located
+			src_seq = src_seq.to(device)
+			src_pos = src_pos.to(device)
+			tgt_seq = tgt_seq.to(device)
+			tgt_pos = tgt_pos.to(device)
 
-		print ("loss: ", loss)
+			output = transformer(src_seq, src_pos, tgt_seq, tgt_pos)
 
-		# idx_to_monitor = np.where(mask_tensor[0, :, 3]==1)[0]
+			loss = loss_criterion(output, target)
+			loss = loss*mask_tensor
+			loss = torch.sum(loss)/torch.sum(mask_tensor)
 
-		# # print (tgt_seq[0, :])
-		# print (target[0, idx_to_monitor, 3])
-		# print (output[0, idx_to_monitor, 3])
+			print ("loss: ", loss)
 
-		# back-propagation
-		optimizer.zero_grad()
-		loss.backward()
-		optimizer.step()
+			# idx_to_monitor = np.where(mask_tensor[0, :, 3]==1)[0]
 
-		# output = transformer(src_seq, src_pos, tgt_seq, tgt_pos)
-		# print (output[0, idx_to_monitor, 3])
+			# # print (tgt_seq[0, :])
+			# print (target[0, idx_to_monitor, 3])
+			# print (output[0, idx_to_monitor, 3])
+
+			# back-propagation
+			optimizer.zero_grad()
+			loss.backward()
+			optimizer.step()
+
+			i += batch_size
+
+			# output = transformer(src_seq, src_pos, tgt_seq, tgt_pos)
+			# print (output[0, idx_to_monitor, 3])
 
 
 	return transformer
@@ -281,8 +298,14 @@ def main():
 
 
 	# create the model, criterior, optimizer etc
-	transformer = Transformer(len(src_vocab), len(mesh_vocab), src_max_seq_len, tgt_max_seq_len, d_word_vec=128, d_model=128, d_inner=256,
-            n_layers=2, n_head=8, d_k=128, d_v=128, dropout=0.1)
+	transformer = Transformer(len(src_vocab), len(mesh_vocab), src_max_seq_len, tgt_max_seq_len, d_word_vec=128, d_model=128, d_inner=512,
+            n_layers=2, n_head=4, d_k=128, d_v=128, dropout=0.1)
+
+	if torch.cuda.device_count() > 1:
+		transformer = nn.DataParallel(transformer)
+
+	transformer.to(device)
+
 	# mseloss = nn.MSELoss(reduction="none")
 	# loss_criterion= nn.BCELoss(reduction="none")
 	loss_criterion = torch.nn.BCEWithLogitsLoss(reduction="none")
@@ -330,7 +353,6 @@ def main():
 
 
 	print ("f1 score: ", np.mean(f1_scores_list))
-
 
 
 	# # test the model

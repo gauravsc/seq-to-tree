@@ -1,0 +1,64 @@
+ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+   1231/1    0.026    0.000  744.050  744.050 {built-in method builtins.exec}
+        1    0.000    0.000  744.050  744.050 generate_batches.py:1(<module>)
+        1    0.008    0.008  741.660  741.660 generate_batches.py:25(generate_batches)
+     1152    0.008    0.000  467.719    0.406 mesh_tree_operations.py:51(get_path_from_root)
+     4301  167.970    0.039  467.699    0.109 simple_paths.py:215(_all_simple_paths_graph)
+        1    3.069    3.069  273.627  273.627 __init__.py:274(load)
+       41    0.004    0.000  244.285    5.958 mesh_tree_operations.py:107(remove_redundant_mesh_terms)
+       40    0.014    0.000  223.462    5.587 mesh_tree_operations.py:56(get_masking_info)
+        1    0.000    0.000  202.213  202.213 __init__.py:302(loads)
+        1    0.000    0.000  202.213  202.213 decoder.py:334(decode)
+        1  202.209  202.209  202.209  202.209 decoder.py:345(raw_decode)
+ 91287162   55.032    0.000  160.472    0.000 graph.py:434(__getitem__)
+        1   17.577   17.577   68.345   68.345 {method 'read' of '_io.TextIOWrapper' objects}
+182574329/91287168   42.159    0.000   63.598    0.000 {built-in method builtins.iter}
+ 91287162   44.385    0.000   54.677    0.000 coreviews.py:80(__getitem__)
+      215    0.000    0.000   50.769    0.236 codecs.py:318(decode)
+      215   50.768    0.236   50.768    0.236 {built-in method _codecs.utf_8_decode}
+ 91287162   39.054    0.000   50.763    0.000 digraph.py:313(adj)
+ 91287162   21.440    0.000   34.349    0.000 coreviews.py:50(__iter__)
+182576999   28.572    0.000   28.574    0.000 {built-in method builtins.next}
+182574324   22.001    0.000   22.001    0.000 coreviews.py:44(__init__)
+ 91287156   18.580    0.000   18.580    0.000 {method 'popitem' of 'collections.OrderedDict' objects}
+ 91287156   10.985    0.000   10.985    0.000 {method 'pop' of 'list' objects}
+ 91317358    8.772    0.000    8.772    0.000 {method 'append' of 'list' objects}
+91344332/91342666    8.758    0.000    8.759    0.000 {built-in method builtins.len}
+    624/4    0.007    0.000    2.423    0.606 <frozen importlib._bootstrap>:966(_find_and_load)
+    624/4    0.005    0.000    2.423    0.606 <frozen importlib._bootstrap>:936(_find_and_load_unlocked)
+    595/5    0.006    0.000    2.418    0.484 <frozen importlib._bootstrap>:651(_load_unlocked)
+    522/5    0.003    0.000    2.418    0.484 <frozen importlib._bootstrap_external>:672(exec_module)
+    747/5    0.001    0.000    2.385    0.477 <frozen importlib._bootstrap>:211(_call_with_frames_removed)
+        1    0.000    0.000    2.359    2.359 mesh_tree_operations.py:1(<module>)
+        1    0.000    0.000    2.350    2.350 __init__.py:54(<module>)
+       27    0.002    0.000    2.061    0.076 __init__.py:1(<module>)
+        3    0.010    0.003    1.596    0.532 __init__.py:4(<module>)
+   405/39    0.001    0.000    1.403    0.036 {built-in method builtins.__import__}
+2197/1363    0.004    0.000    1.245    0.001 <frozen importlib._bootstrap>:997(_handle_fromlist)
+      522    0.009    0.000    1.200    0.002 <frozen importlib._bootstrap_external>:743(get_code)
+        1    0.000    0.000    1.145    1.145 geometric.py:16(<module>)
+      522    0.264    0.001    1.061    0.002 <frozen importlib._bootstrap_external>:830(get_data)
+        1    0.000    0.000    0.879    0.879 __init__.py:57(<module>)
+        1    0.000    0.000    0.857    0.857 __init__.py:106(<module>)
+      522    0.796    0.002    0.796    0.002 {method 'read' of '_io.FileIO' objects}
+        1    0.000    0.000    0.748    0.748 add_newdocs.py:10(<module>)
+        1    0.000    0.000    0.514    0.514 type_check.py:3(<module>)
+  586/585    0.003    0.000    0.492    0.001 <frozen importlib._bootstrap>:564(module_from_spec)
+    59/58    0.000    0.000    0.458    0.008 <frozen importlib._bootstrap_external>:919(create_module)
+    59/58    0.456    0.008    0.458    0.008 {built-in method _imp.create_dynamic}
+        3    0.000    0.000    0.283    0.094 __init__.py:3(<module>)
+        1    0.000    0.000    0.280    0.280 intersection.py:4(<module>)
+        1    0.000    0.000    0.248    0.248 __init__.py:94(<module>)
+        1    0.010    0.010    0.235    0.235 mesh_tree_operations.py:7(create_ontology_tree)
+        1    0.000    0.000    0.203    0.203 nx_pydot.py:15(<module>)
+        1    0.000    0.000    0.200    0.200 __init__.py:16(<module>)
+      613    0.009    0.000    0.198    0.000 <frozen importlib._bootstrap>:870(_find_spec)
+      608    0.001    0.000    0.183    0.000 <frozen importlib._bootstrap_external>:1149(find_spec)
+      608    0.005    0.000    0.182    0.000 <frozen importlib._bootstrap_external>:1117(_get_spec)
+        1    0.000    0.000    0.170    0.170 _spherical_voronoi.py:6(<module>)
+     1033    0.019    0.000    0.168    0.000 <frozen importlib._bootstrap_external>:1233(find_spec)
+        1    0.000    0.000    0.166    0.166 distance.py:73(<module>)
+      669    0.007    0.000    0.140    0.000 decorator.py:190(create)
+        1    0.000    0.000    0.124    0.124 misc.py:10(<module>)
+        1    0.000    0.000    0.121    0.121 uuid.py:45(<module>)
+        1    0.000    0.000    0.119    0.119 index_tricks.py:1(<module>)

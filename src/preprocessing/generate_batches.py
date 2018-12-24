@@ -36,6 +36,16 @@ def all_paths_from_root(G):
 
 		# paths_from_root[mesh_label] = get_path_from_root(G, mesh_label)
 
+	mesh_labels = set(mesh_labels)
+	mesh_done = set(paths_from_root.keys())
+
+	mesh_left = list(mesh_labels-mesh_done)
+
+	for node in mesh_left:
+		path = get_path_from_root(G, node)
+		paths_from_root[node] = path
+
+
 	return paths_from_root
 
 
