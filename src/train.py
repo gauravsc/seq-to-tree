@@ -21,36 +21,46 @@ threshold = 0.0
 n_train_iterations = 1400
 save_model = True
 load_model = True
-batch_size = 6
-device = torch.device("cuda:0")
+train_model = True
+batch_size = 8
+max_batch_size = batch_size*15
+in_device = torch.device("cuda:0")
+out_device = torch.device("cuda:3")
 
 def get_vocab(data_file):
 
 	if os.path.isfile('../data/english_vocab.pkl'):
-		vocab, word_to_ind = pickle.load(open('../data/english_vocab.pkl','r'))
+		vocab, word_to_ind = pickle.load(open('../data/english_vocab.pkl','rb'))
 		return vocab, word_to_ind
 
-	data = json.load(open(data_file,'r'))
-	records = data['articles']
+	with open('../data/bioasq_dataset/allMeSH_2017.json', 'r', encoding="utf8", errors='ignore') as f:
+		records = json.load(f)['articles']
 	
-	abstracts = []
-	for record in records:
-		abstracts.append(record['abstractText'])
-
-	abstracts = [abstract.lower() for abstract in abstracts]
-	abstracts = [abstract.split(' ') for abstract in abstracts]
-
 	word_count = {}
-	for abstract in abstracts:
-		for word in abstract:
+	for record in records:
+		words_in_abstract = record['abstractText'].lower().split(' ')
+		for word in words_in_abstract:
 			if word in word_count:
 				word_count[word] += 1
 			else:
-				word_count[word] = 0
+				word_count[word] = 1
+
+	# abstracts = [abstract.lower() for abstract in abstracts]
+	# abstracts = [abstract.split(' ') for abstract in abstracts]
+
+	# word_count = {}
+	# for abstract in abstracts:
+	# 	for word in abstract:
+	# 		if word in word_count:
+	# 			word_count[word] += 1
+	# 		else:
+	# 			word_count[word] = 0
 
 	vocab = [k for k in sorted(word_count, key=word_count.get, reverse=True)]
+	
 	# reduce the size of vocab to max size
 	vocab = vocab[:vocab_size]
+
 	# add the unknown token to the vocab
 	vocab = ['$PAD$'] + vocab + ['unk']
 
@@ -58,7 +68,7 @@ def get_vocab(data_file):
 	for i, word in enumerate(vocab):
 		word_to_ind[word] = i
 
-	pickle.dump((vocab, word_to_ind), open('../data/english_vocab.pkl','w'))
+	pickle.dump((vocab, word_to_ind), open('../data/english_vocab.pkl','wb'))
 
 	return vocab, word_to_ind
 
@@ -78,9 +88,10 @@ def prepare_train_data(minibatch_data, word_to_idx, mesh_to_idx, ontology_idx_tr
 		word_seq = abst.lower().strip().split(' ')
 		idx_seq = [word_to_idx[word] if word in word_to_idx else word_to_idx['unk'] for word in word_seq]
 		src_seq = np.zeros(src_max_seq_len, dtype=int)
-		src_seq[:len(idx_seq)] = idx_seq
+		# only copy till max length
+		src_seq[:len(idx_seq)] = idx_seq[:src_max_seq_len]
 		src_pos = np.zeros(src_max_seq_len, dtype=int)
-		src_pos[:len(idx_seq)] = range(1, len(idx_seq)+1)
+		src_pos[: min(src_max_seq_len, len(idx_seq))] = range(1, min(src_max_seq_len, len(idx_seq))+1)
 
 		for j, tgt in enumerate(tgts[i]):
 			tgt_seq = np.zeros(tgt_max_seq_len, dtype=int)
@@ -142,23 +153,40 @@ def batch_one_hot_encode(vector_list, vocab_size):
 
 def train(transformer, loss_criterion, optimizer, ontology_idx_tree, mesh_vocab, word_to_idx, mesh_to_idx, root):
 	# Finally preperation for the training data e.g. source, target and mask
+	
 	# Get a list of all the batch files 
 	files = os.listdir('../data/bioasq_dataset/train_batches/')
-	for file in files:
+	# Randomly shuffle the files 
+	rd.shuffle(files)
+	# Get the count of # of files
+	files_cnt = len(files)
+
+	for it, file in enumerate(files):
 		file_data = json.load(open('../data/bioasq_dataset/train_batches/'+file,'r'))
 		file_size = len(file_data['abs'])
 
 		i = 0
+		av_loss = 0.0
 		while i <  file_size:
 			minibatch_data = {'abs': file_data['abs'][i:i+batch_size], 
 			'tgt': file_data['tgt'][i:i+batch_size], 'mask':file_data['mask'][i:i+batch_size]}
 			
 			src_seq, src_pos, tgt_seq, tgt_pos, mask_tensor = prepare_train_data(minibatch_data, word_to_idx, mesh_to_idx, ontology_idx_tree, root)
+			
 			src_seq = torch.tensor(src_seq)
 			src_pos = torch.tensor(src_pos)
 			tgt_seq = torch.tensor(tgt_seq)
 			tgt_pos = torch.tensor(tgt_pos)
 			mask_tensor = torch.tensor(mask_tensor, dtype=torch.float)
+
+			# fix the max size of the batch 
+			ind = np.random.choice(src_seq.shape[0], min(max_batch_size,src_seq.shape[0]), replace=False)
+			src_seq = src_seq[ind]
+			src_pos = src_pos[ind]
+			tgt_seq = tgt_seq[ind]
+			tgt_pos = tgt_pos[ind]
+			mask_tensor = mask_tensor[ind]
+
 			# print(src_seq.shape, src_pos.shape, tgt_seq.shape, tgt_pos.shape)
 
 			target = torch.tensor(batch_one_hot_encode(tgt_seq, len(mesh_vocab)), dtype=torch.float)
@@ -171,10 +199,12 @@ def train(transformer, loss_criterion, optimizer, ontology_idx_tree, mesh_vocab,
 			# print (tgt_pos[0, :])
 
 			# copy tensors to the gpu device where the model is located
-			src_seq = src_seq.to(device)
-			src_pos = src_pos.to(device)
-			tgt_seq = tgt_seq.to(device)
-			tgt_pos = tgt_pos.to(device)
+			src_seq = src_seq.to(in_device)
+			src_pos = src_pos.to(in_device)
+			tgt_seq = tgt_seq.to(in_device)
+			tgt_pos = tgt_pos.to(in_device)
+			target = target.to(in_device)
+			mask_tensor = mask_tensor.to(in_device)
 
 			output = transformer(src_seq, src_pos, tgt_seq, tgt_pos)
 
@@ -182,7 +212,7 @@ def train(transformer, loss_criterion, optimizer, ontology_idx_tree, mesh_vocab,
 			loss = loss*mask_tensor
 			loss = torch.sum(loss)/torch.sum(mask_tensor)
 
-			print ("loss: ", loss)
+			print("loss: ", loss)
 
 			# idx_to_monitor = np.where(mask_tensor[0, :, 3]==1)[0]
 
@@ -195,11 +225,23 @@ def train(transformer, loss_criterion, optimizer, ontology_idx_tree, mesh_vocab,
 			loss.backward()
 			optimizer.step()
 
+			av_loss += loss.data.cpu().numpy()
+
+			del loss, output, mask_tensor
+
 			i += batch_size
 
 			# output = transformer(src_seq, src_pos, tgt_seq, tgt_pos)
 			# print (output[0, idx_to_monitor, 3])
 
+		if (it+1) % 200 == 0:
+			validate_model(transformer, ontology_idx_tree, mesh_vocab, word_to_idx, mesh_to_idx, root)			
+			# save the learned model
+			if save_model:
+				torch.save(transformer.state_dict(), '../saved_models/model.pt')
+
+
+		print("Epochs: ", it/float(files_cnt), "loss: ", av_loss/(file_size/batch_size))
 
 	return transformer
 
@@ -229,7 +271,7 @@ def recursive_decoding(transformer, mesh_idx_seq, src_seq, src_pos, ontology_idx
 	# get the activated children of the current node
 	legit_children = list(ontology_idx_tree.successors(mesh_idx_seq[-1]))
 	act_nodes = output[0, legit_children, len(mesh_idx_seq)-1]
-	print("active nodes: ", act_nodes)
+	# print("active nodes: ", act_nodes)
 	nxt_nodes = [legit_children[i] for i in range(len(legit_children))  if act_nodes[i] > threshold]
 	
 	if len(nxt_nodes) == 0:
@@ -267,10 +309,43 @@ def predict(transformer, ontology_idx_tree, mesh_vocab, word_to_idx, mesh_to_idx
 	return pred_mesh_idx
 
 
+def validate_model(transformer, ontology_idx_tree, mesh_vocab, word_to_idx, mesh_to_idx, root):
+	val_data_files = os.listdir('../data/bioasq_dataset/val_batches/')
+	transformer = transformer.eval()
+	pred_mesh_idx = []
+	true_mesh_idx = []
+	
+	for file in val_data_files:
+		data = json.load(open(file,'r'))
+		abstracts = data['abs']
+		tgts = data['tgt']
+		val_data = {"documents":[]}
+		
+		for i in range(len(abstracts)):
+			abstract_text = abstracts[i]
+			mesh_idxs = [seq[-1] for seq in tgts[i]] 
+			val_data['documents'].append({'abstractText': abstract_text})
+			true_mesh_idx.append(mesh_idxs)
+
+		pred_mesh_idx += predict(transformer, ontology_idx_tree, mesh_vocab, word_to_idx, mesh_to_idx, root, val_data)
+
+	pred_mesh_idx = [list(set(pred_labels))  for pred_labels in pred_mesh_idx]
+	# print (true_mesh_idx)
+	# print (pred_mesh_idx)
+
+	f1_scores_list = []
+	print ("\n Evaluation on the val set")
+	for true_labels, pred_labels in zip(true_mesh_idx, pred_mesh_idx):
+		f1_scores_list.append(f1_score(true_labels, pred_labels))
+
+	print ("f1 score: ", np.mean(f1_scores_list))
+
+
+
 def main():
 	
 	# location of the toy dataset ---> this needs to be replaced with the final dataset
-	data_file = '../data/bioasq_dataset/toyMeSH_2017.json'
+	data_file = '../data/bioasq_dataset/allMeSH_2017.json'
 
 	# create the vocabulary for the input 
 	src_vocab, word_to_idx = get_vocab(data_file)
@@ -298,30 +373,32 @@ def main():
 
 
 	# create the model, criterior, optimizer etc
-	transformer = Transformer(len(src_vocab), len(mesh_vocab), src_max_seq_len, tgt_max_seq_len, d_word_vec=128, d_model=128, d_inner=512,
-            n_layers=2, n_head=4, d_k=128, d_v=128, dropout=0.1)
+	transformer = Transformer(len(src_vocab), len(mesh_vocab), src_max_seq_len, tgt_max_seq_len, d_word_vec=128, d_model=128, d_inner=256,
+            n_layers=2, n_head=2, d_k=64, d_v=64, dropout=0.1)
 
 	if torch.cuda.device_count() > 1:
-		transformer = nn.DataParallel(transformer)
+		transformer = nn.DataParallel(transformer, output_device=in_device)
 
-	transformer.to(device)
+	transformer.to(in_device)
 
 	# mseloss = nn.MSELoss(reduction="none")
 	# loss_criterion= nn.BCELoss(reduction="none")
 	loss_criterion = torch.nn.BCEWithLogitsLoss(reduction="none")
 	optimizer = torch.optim.Adam(transformer.parameters(), lr=0.0005)
 
-	# train the model 
-	transformer = train(transformer, loss_criterion, optimizer, ontology_idx_tree, mesh_vocab, word_to_idx, mesh_to_idx, root)
-	
-	# save the learned model
-	if save_model:
-		torch.save(transformer.state_dict(), '../saved_models/model.pt')
-
 
 	# load the saved model
 	if load_model:
 		transformer.load_state_dict(torch.load('../saved_models/model.pt'))
+
+	if train_model:
+		# train the model 
+		transformer = train(transformer, loss_criterion, optimizer, ontology_idx_tree, mesh_vocab, word_to_idx, mesh_to_idx, root)
+	
+	# # save the learned model
+	# if save_model:
+	# 	torch.save(transformer.state_dict(), '../saved_models/model.pt')
+
 	
 	# validate the model
 	val_data_files = ['../data/bioasq_dataset/val_batches/1.json', '../data/bioasq_dataset/val_batches/2.json']
