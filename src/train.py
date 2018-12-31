@@ -20,7 +20,7 @@ learning_rate = 0.005
 threshold = 0.0
 n_train_iterations = 1400
 save_model = True
-load_model = False
+load_model = True
 train_model = True
 batch_size = 8
 max_batch_size = batch_size*15
@@ -310,13 +310,14 @@ def predict(transformer, ontology_idx_tree, mesh_vocab, word_to_idx, mesh_to_idx
 
 
 def validate_model(transformer, ontology_idx_tree, mesh_vocab, word_to_idx, mesh_to_idx, root):
-	val_data_files = os.listdir('../data/bioasq_dataset/val_batches/')
+	path = '../data/bioasq_dataset/val_batches/'
+	val_data_files = os.listdir(path)
 	transformer = transformer.eval()
 	pred_mesh_idx = []
 	true_mesh_idx = []
 	
 	for file in val_data_files:
-		data = json.load(open('../data/bioasq_dataset/val_batches/'+file,'r'))
+		data = json.load(open(path+file,'r'))
 		abstracts = data['abs']
 		tgts = data['tgt']
 		val_data = {"documents":[]}
@@ -393,6 +394,7 @@ def main():
 
 	if train_model:
 		# train the model 
+		transformer = transformer.train()
 		transformer = train(transformer, loss_criterion, optimizer, ontology_idx_tree, mesh_vocab, word_to_idx, mesh_to_idx, root)
 	
 	# # save the learned model
@@ -401,42 +403,47 @@ def main():
 
 	
 	# validate the model
-	val_data_files = ['../data/bioasq_dataset/val_batches/1.json', '../data/bioasq_dataset/val_batches/2.json']
+	validate_model(transformer, ontology_idx_tree, mesh_vocab, word_to_idx, mesh_to_idx, root)
+
+
+	# pred_mesh_idx = [list(set(pred_labels))  for pred_labels in pred_mesh_idx]
+	# print (true_mesh_idx)
+	# print (pred_mesh_idx)
+
+	# f1_scores_list = []
+	# print ("\n Evaluation on the dev set")
+	# for true_labels, pred_labels in zip(true_mesh_idx, pred_mesh_idx):
+	# 	f1_scores_list.append(f1_score(true_labels, pred_labels))
+
+	# print ("f1 score: ", np.mean(f1_scores_list))
+
+
+	# prepare the test submission
+	path = '../data/bioasq_dataset/test-batches-task-5A/'
+	test_data_files = os.listdir(path)
 	transformer = transformer.eval()
-	pred_mesh_idx = []
-	true_mesh_idx = []
-	for data_file in val_data_files:
-		data = json.load(open(data_file,'r'))
-		abstracts = data['abs']
-		tgts = data['tgt']
-		val_data = {"documents":[]}
-		for i in range(len(abstracts)):
-			abstract_text = abstracts[i]
-			mesh_idxs = [seq[-1] for seq in tgts[i]] 
-			val_data['documents'].append({'abstractText': abstract_text})
-			true_mesh_idx.append(mesh_idxs)
+	for file in test_data_files:
+		test_data = json.load(open(path+file, 'r', encoding="utf8", errors='ignore'))
+		pred_mesh_terms = predict(transformer, ontology_idx_tree, mesh_vocab, word_to_idx, mesh_to_idx, root, test_data)
+		
+		pred_mesh_indicators = []
+		for mesh_idx_list in pred_mesh_terms:
+			pred_mesh_indicators.append([mesh_vocab[idx] for idx in mesh_idx_list])
 
-		pred_mesh_idx += predict(transformer, ontology_idx_tree, mesh_vocab, word_to_idx, mesh_to_idx, root, val_data)
+		pmid_list = [doc['pmid'] for doc in test_data['documents']]
 
+		# create test file for submission
+		out_file_name = file.split(".")[0] + "_output.json"	
+		f_write = open(path+out_file_name, 'w')
 
-	pred_mesh_idx = [list(set(pred_labels))  for pred_labels in pred_mesh_idx]
-	print (true_mesh_idx)
-	print (pred_mesh_idx)
+		out_data = []
+		for i in range(len(pmid_list)):
+			out_data.append({'pmid':pmid[i], "labels": pred_mesh_indicators[i]})
+		out_data = {"documents": out_data}
 
-	f1_scores_list = []
-	print ("\n Evaluation on the dev set")
-	for true_labels, pred_labels in zip(true_mesh_idx, pred_mesh_idx):
-		f1_scores_list.append(f1_score(true_labels, pred_labels))
+		json.dump(out_data, f_write)
 
 
-	print ("f1 score: ", np.mean(f1_scores_list))
-
-
-	# # test the model
-	# test_data_files = ['../data/bioasq_dataset/Task5a-Batch1-Week1_raw.json']
-	# transformer = transformer.eval()
-	# for data_file in test_data_files:
-	# 	pred_mesh_terms = predict(transformer, ontology_idx_tree, mesh_vocab, word_to_idx, mesh_to_idx, root, data_file)
 
 
 
