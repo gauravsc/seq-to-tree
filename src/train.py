@@ -20,7 +20,7 @@ learning_rate = 0.005
 threshold = 0.0
 n_train_iterations = 1400
 save_model = True
-load_model = True
+load_model = False
 train_model = True
 batch_size = 8
 max_batch_size = batch_size*15
@@ -235,12 +235,12 @@ def train(transformer, loss_criterion, optimizer, ontology_idx_tree, mesh_vocab,
 			# print (output[0, idx_to_monitor, 3])
 
 		if (it+1) % 200 == 0:
-			validate_model(transformer, ontology_idx_tree, mesh_vocab, word_to_idx, mesh_to_idx, root)			
-			# save the learned model
 			if save_model:
 				torch.save(transformer.state_dict(), '../saved_models/model.pt')
 
-
+			validate_model(transformer, ontology_idx_tree, mesh_vocab, word_to_idx, mesh_to_idx, root)			
+			# save the learned model
+			
 		print("Epochs: ", it/float(files_cnt), "loss: ", av_loss/(file_size/batch_size))
 
 	return transformer
@@ -293,9 +293,9 @@ def predict(transformer, ontology_idx_tree, mesh_vocab, word_to_idx, mesh_to_idx
 		word_seq = doc['abstractText'].lower().strip().split(' ')
 		word_idx_seq = [word_to_idx[word] if word in word_to_idx else word_to_idx['unk'] for word in word_seq]
 		src_seq = np.zeros(src_max_seq_len, dtype=int)
-		src_seq[:len(word_idx_seq)] = word_idx_seq
+		src_seq[:len(word_idx_seq)] = word_idx_seq[:src_max_seq_len]
 		src_pos = np.zeros(src_max_seq_len, dtype=int)
-		src_pos[:len(word_idx_seq)] = range(1, len(word_idx_seq)+1)
+		src_pos[:min(src_max_seq_len, len(word_idx_seq))] = range(1, min(src_max_seq_len, len(word_idx_seq))+1)
 
 		# reshape to create batch of size 1
 		src_seq = torch.tensor(src_seq.reshape((1,-1)))
@@ -316,7 +316,7 @@ def validate_model(transformer, ontology_idx_tree, mesh_vocab, word_to_idx, mesh
 	true_mesh_idx = []
 	
 	for file in val_data_files:
-		data = json.load(open(file,'r'))
+		data = json.load(open('../data/bioasq_dataset/val_batches/'+file,'r'))
 		abstracts = data['abs']
 		tgts = data['tgt']
 		val_data = {"documents":[]}
