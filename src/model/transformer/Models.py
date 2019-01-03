@@ -206,4 +206,6 @@ class Transformer(nn.Module):
         seq_logit = self.tgt_word_prj(dec_output) * self.x_logit_scale
         seq_logit = seq_logit.permute(0,2,1)
         # return seq_logit.view(-1, seq_logit.size(2))
+
+        # enc output shape = torch.Size([9, 1000, 512])
         return seq_logit

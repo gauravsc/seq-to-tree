@@ -54,8 +54,10 @@ def generate_batches():
 
 	with open('../data/bioasq_dataset/allMeSH_2017.json', 'r', encoding="utf8", errors='ignore') as f:
 		training_docs = json.load(f)['articles']
-		# training_docs = training_docs
 	
+	# with open('../data/bioasq_dataset/toyMeSH_2017.json', 'r', encoding="utf8", errors='ignore') as f:
+	# 	training_docs = json.load(f)['articles']
+
 	G = create_ontology_tree()
 	
 	with open('../data/mesh_to_idx.pkl', 'rb') as fread:

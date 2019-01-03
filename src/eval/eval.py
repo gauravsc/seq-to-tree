@@ -8,7 +8,11 @@ def f1_score(true_labels, pred_labels):
 	# compute precision, recall and f1 scores for one instance
 	precision = len(true_labels.intersection(pred_labels))/float(len(pred_labels))
 	recall = len(true_labels.intersection(pred_labels))/float(len(true_labels))
-	f1_score = 2*precision*recall/(precision+recall)
+
+	if precision+recall > 0:
+		f1_score = 2*precision*recall/(precision+recall)
+	else:
+		f1_score = 0
 
 	return f1_score
 
