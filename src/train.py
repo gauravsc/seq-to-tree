@@ -10,19 +10,21 @@ from utils.embedding_operations import *
 import pickle
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from eval.eval import * 
 
 # global vparameters
 vocab_size = 250000
 src_max_seq_len = 1000
 tgt_max_seq_len = 20
-learning_rate = 0.005
-threshold = 0.0
+learning_rate = 0.01
+threshold = 0.4
 n_train_iterations = 1400
 save_model = True
 load_model = True
 train_model = True
 batch_size = 4
+clip_norm = 5.0
 max_batch_size = batch_size*15
 in_device = torch.device("cuda:0")
 out_device = torch.device("cuda:3")
@@ -151,14 +153,15 @@ def train(transformer, loss_criterion, optimizer, ontology_idx_tree, mesh_vocab,
 	# Get the count of # of files
 	files_cnt = len(files)
 
-	for ep in range(n_epochs): 
+	for ep in range(n_epochs):
+		av_loss = 0.0 
 		for it, file in enumerate(files):
+
 			file_data = json.load(open('../data/bioasq_dataset/train_batches/'+file,'r'))
 			file_size = len(file_data['abs'])
-
+			
 			i = 0
-			av_loss = 0.0
-			while i <  file_size:
+			while i < file_size:
 				minibatch_data = {'abs': file_data['abs'][i:i+batch_size], 
 				'tgt': file_data['tgt'][i:i+batch_size], 'mask':file_data['mask'][i:i+batch_size]}
 				
@@ -204,16 +207,18 @@ def train(transformer, loss_criterion, optimizer, ontology_idx_tree, mesh_vocab,
 				loss = torch.sum(loss)/torch.sum(mask_tensor)
 
 				print("loss: ", loss)
-
-				# idx_to_monitor = np.where(mask_tensor[0, :, 3]==1)[0]
+				# mask_tensor_copy = mask_tensor.data.cpu().numpy()
+				# idx_ = 6
+				# idx_to_monitor = np.where(mask_tensor_copy[0, :, idx_]==1)[0]
 
 				# # print (tgt_seq[0, :])
-				# print (target[0, idx_to_monitor, 3])
-				# print (output[0, idx_to_monitor, 3])
+				# print (target[0, idx_to_monitor, idx_])
+				# print (output[0, idx_to_monitor, idx_])
 
 				# back-propagation
 				optimizer.zero_grad()
 				loss.backward()
+				torch.nn.utils.clip_grad_norm_(transformer.parameters(), clip_norm)
 				optimizer.step()
 
 				av_loss += loss.data.cpu().numpy()
@@ -223,16 +228,18 @@ def train(transformer, loss_criterion, optimizer, ontology_idx_tree, mesh_vocab,
 				i += batch_size
 
 				# output = transformer(src_seq, src_pos, tgt_seq, tgt_pos)
-				# print (output[0, idx_to_monitor, 3])
+				# print (output[0, idx_to_monitor, idx_])
 
-			print("Epochs: ", str(ep)+"/"+str(n_epochs), "loss: ", av_loss/(file_size/batch_size))
+		print("Epochs: ", str(ep)+"/"+str(n_epochs), "loss: ", av_loss/(files_cnt*(file_size/batch_size)))
 		
-			# save the learned model
-			if save_model:
-				torch.save(transformer.state_dict(), '../saved_models/model.pt')
-
 		# validate the  model
-		# validate_model(transformer, ontology_idx_tree, mesh_vocab, word_to_idx, mesh_to_idx, root)			
+		validate_model(transformer, ontology_idx_tree, mesh_vocab, word_to_idx, mesh_to_idx, root)
+
+		# save the learned model
+		if save_model:
+			torch.save(transformer.state_dict(), '../saved_models/model.pt')
+
+					
 				
 	return transformer
 
@@ -259,6 +266,9 @@ def recursive_decoding(transformer, mesh_idx_seq, src_seq, src_pos, ontology_idx
 	# get output of the model 
 	output = transformer(src_seq, src_pos, tgt_seq, tgt_pos)
 
+	# apply sigmoid to the output
+	output = F.sigmoid(output)
+
 	# get the activated children of the current node
 	legit_children = list(ontology_idx_tree.successors(mesh_idx_seq[-1]))
 	act_nodes = output[0, legit_children, len(mesh_idx_seq)-1]
@@ -280,9 +290,11 @@ def predict(transformer, ontology_idx_tree, mesh_vocab, word_to_idx, mesh_to_idx
 	
 	# iterate over one document at a time
 	pred_mesh_idx = []
-	for doc in test_data:
+	for i, doc in enumerate(test_data):
+		print (str(i)+"/"+str(len(test_data)))
 		word_seq = doc['abstractText'].lower().strip().split(' ')
 		word_idx_seq = [word_to_idx[word] if word in word_to_idx else word_to_idx['unk'] for word in word_seq]
+		# print ("word idx sequence: ", word_idx_seq)
 		src_seq = np.zeros(src_max_seq_len, dtype=int)
 		src_seq[:len(word_idx_seq)] = word_idx_seq[:src_max_seq_len]
 		src_pos = np.zeros(src_max_seq_len, dtype=int)
@@ -293,9 +305,10 @@ def predict(transformer, ontology_idx_tree, mesh_vocab, word_to_idx, mesh_to_idx
 		src_pos = torch.tensor(src_pos.reshape((1,-1)))
 
 		mesh_idx_seq = [1, root]
-		pred_mesh_idx.append(recursive_decoding(transformer, mesh_idx_seq, src_seq, src_pos, ontology_idx_tree))
+		pred_for_one_doc = recursive_decoding(transformer, mesh_idx_seq, src_seq, src_pos, ontology_idx_tree)
+		pred_mesh_idx.append(pred_for_one_doc)
 
-	# print(pred_mesh_idx)
+		print(set(pred_for_one_doc))
 
 	return pred_mesh_idx
 
@@ -370,9 +383,23 @@ def main():
 	root = [n for n,d in ontology_idx_tree.in_degree() if d==0] [0]
 	print ("Ontolgy tree created with # Nodes: ", len(ontology_idx_tree.nodes()))
 
+
+	# Define values for all the parameters
+	d_word_vec = 512 
+	d_model = 512
+	d_inner = 1024
+	n_layers = 2
+	n_head = 4
+	d_k = 64
+	d_v = 64
+	dropout = 0.1
+	print ("Model constructed with following parameters: ")
+	print ("d_word_vec=", d_word_vec, "d_model=", d_model, "d_inner=", d_inner, "n_layers=", n_layers,
+		"n_heads=", n_head, "d_k=", d_k, "d_v=", d_v)
+	
 	# create the model, criterior, optimizer etc
-	transformer = Transformer(len(src_vocab), len(mesh_vocab), src_max_seq_len, tgt_max_seq_len, d_word_vec=512, d_model=512, d_inner=2048,
-            n_layers=2, n_head=3, d_k=64, d_v=64, dropout=0.1)
+	transformer = Transformer(len(src_vocab), len(mesh_vocab), src_max_seq_len, tgt_max_seq_len, d_word_vec=d_word_vec, d_model=d_model, d_inner=d_inner,
+            n_layers=n_layers, n_head=n_head, d_k=d_k, d_v=d_v, dropout=0.1)
 
 	if torch.cuda.device_count() > 1:
 		transformer = nn.DataParallel(transformer, output_device=out_device)
@@ -382,9 +409,8 @@ def main():
 	# mseloss = nn.MSELoss(reduction="none")
 	# loss_criterion= nn.BCELoss(reduction="none")
 	loss_criterion = torch.nn.BCEWithLogitsLoss(reduction="none")
-	optimizer = torch.optim.Adam(transformer.parameters(), lr=learning_rate)
-
-
+	# optimizer = torch.optim.Adam(transformer.parameters(), lr=learning_rate, betas=(0.9,0.999))
+	optimizer = torch.optim.SGD(transformer.parameters(), lr=learning_rate)
 	# load the saved model
 	if load_model and os.path.isfile('../saved_models/model.pt'):
 		transformer.load_state_dict(torch.load('../saved_models/model.pt'))
