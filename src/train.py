@@ -17,17 +17,17 @@ from eval.eval import *
 vocab_size = 250000
 src_max_seq_len = 1000
 tgt_max_seq_len = 20
-learning_rate = 0.01
-threshold = 0.4
+learning_rate = 0.005
+threshold = 0.5
 n_train_iterations = 1400
 save_model = True
 load_model = True
 train_model = True
-batch_size = 4
+batch_size = 240
 clip_norm = 5.0
-max_batch_size = batch_size*15
+max_batch_size = 16
 in_device = torch.device("cuda:0")
-out_device = torch.device("cuda:3")
+out_device = torch.device("cuda:0")
 n_epochs = 100
 # set random seed
 rd.seed(9001)
@@ -154,7 +154,7 @@ def train(transformer, loss_criterion, optimizer, ontology_idx_tree, mesh_vocab,
 	files_cnt = len(files)
 
 	for ep in range(n_epochs):
-		av_loss = 0.0 
+		list_losses = [] 
 		for it, file in enumerate(files):
 
 			file_data = json.load(open('../data/bioasq_dataset/train_batches/'+file,'r'))
@@ -167,73 +167,76 @@ def train(transformer, loss_criterion, optimizer, ontology_idx_tree, mesh_vocab,
 				
 				src_seq, src_pos, tgt_seq, tgt_pos, mask_tensor = prepare_train_data(minibatch_data, word_to_idx, mesh_to_idx, ontology_idx_tree, root)
 				
-				src_seq = torch.tensor(src_seq)
-				src_pos = torch.tensor(src_pos)
-				tgt_seq = torch.tensor(tgt_seq)
-				tgt_pos = torch.tensor(tgt_pos)
-				mask_tensor = torch.tensor(mask_tensor, dtype=torch.float)
+				src_seq_full = torch.tensor(src_seq)
+				src_pos_full = torch.tensor(src_pos)
+				tgt_seq_full = torch.tensor(tgt_seq)
+				tgt_pos_full = torch.tensor(tgt_pos)
+				mask_tensor_full = torch.tensor(mask_tensor, dtype=torch.float)
 
-				# fix the max size of the batch 
-				ind = np.random.choice(src_seq.shape[0], min(max_batch_size,src_seq.shape[0]), replace=False)
-				src_seq = src_seq[ind]
-				src_pos = src_pos[ind]
-				tgt_seq = tgt_seq[ind]
-				tgt_pos = tgt_pos[ind]
-				mask_tensor = mask_tensor[ind]
+				for rs in range(int((batch_size*15)/max_batch_size)):
 
-				# print(src_seq.shape, src_pos.shape, tgt_seq.shape, tgt_pos.shape)
+					# fix the max size of the batch 
+					ind = np.random.choice(src_seq_full.shape[0], max_batch_size, replace=False)
+					src_seq = src_seq_full[ind]
+					src_pos = src_pos_full[ind]
+					tgt_seq = tgt_seq_full[ind]
+					tgt_pos = tgt_pos_full[ind]
+					mask_tensor = mask_tensor_full[ind]
 
-				target = torch.tensor(batch_one_hot_encode(tgt_seq, len(mesh_vocab)), dtype=torch.float)
+					# print(src_seq.shape, src_pos.shape, tgt_seq.shape, tgt_pos.shape)
+					target = torch.tensor(batch_one_hot_encode(tgt_seq, len(mesh_vocab)), dtype=torch.float)
 
-				# shift the sequence of target nodes by one right
-				zero_col = torch.ones(tgt_seq.shape[0], 1, dtype=torch.long)
-				tgt_seq = torch.cat((zero_col, tgt_seq), dim=1)
+					# shift the sequence of target nodes by one right
+					zero_col = torch.ones(tgt_seq.shape[0], 1, dtype=torch.long)
+					tgt_seq = torch.cat((zero_col, tgt_seq), dim=1)
 
-				# print (tgt_seq[0, :])
-				# print (tgt_pos[0, :])
+					# print (tgt_seq[0, :])
+					# print (tgt_pos[0, :])
 
-				# copy tensors to the gpu device where the model is located
-				src_seq = src_seq.to(in_device)
-				src_pos = src_pos.to(in_device)
-				tgt_seq = tgt_seq.to(in_device)
-				tgt_pos = tgt_pos.to(in_device)
-				target = target.to(out_device)
-				mask_tensor = mask_tensor.to(out_device)
+					# copy tensors to the gpu device where the model is located
+					src_seq = src_seq.to(in_device)
+					src_pos = src_pos.to(in_device)
+					tgt_seq = tgt_seq.to(in_device)
+					tgt_pos = tgt_pos.to(in_device)
+					target = target.to(out_device)
+					mask_tensor = mask_tensor.to(out_device)
 
-				output = transformer(src_seq, src_pos, tgt_seq, tgt_pos)
+					output = transformer(src_seq, src_pos, tgt_seq, tgt_pos)
 
-				loss = loss_criterion(output, target)
-				loss = loss*mask_tensor
-				loss = torch.sum(loss)/torch.sum(mask_tensor)
+					loss = loss_criterion(output, target)
+					loss = loss*mask_tensor
+					loss = torch.sum(loss)/torch.sum(mask_tensor)
 
-				print("loss: ", loss)
-				# mask_tensor_copy = mask_tensor.data.cpu().numpy()
-				# idx_ = 6
-				# idx_to_monitor = np.where(mask_tensor_copy[0, :, idx_]==1)[0]
+					print("loss: ", loss)
+					# mask_tensor_copy = mask_tensor.data.cpu().numpy()
+					# idx_ = 6
+					# idx_to_monitor = np.where(mask_tensor_copy[0, :, idx_]==1)[0]
 
-				# # print (tgt_seq[0, :])
-				# print (target[0, idx_to_monitor, idx_])
-				# print (output[0, idx_to_monitor, idx_])
+					# # print (tgt_seq[0, :])
+					# print (target[0, idx_to_monitor, idx_])
+					# print (output[0, idx_to_monitor, idx_])
 
-				# back-propagation
-				optimizer.zero_grad()
-				loss.backward()
-				torch.nn.utils.clip_grad_norm_(transformer.parameters(), clip_norm)
-				optimizer.step()
+					# back-propagation
+					optimizer.zero_grad()
+					loss.backward()
+					torch.nn.utils.clip_grad_norm_(transformer.parameters(), clip_norm)
+					optimizer.step()
 
-				av_loss += loss.data.cpu().numpy()
+					list_losses.append(loss.data.cpu().numpy())
 
-				del loss, output, mask_tensor
+					del loss, output, mask_tensor
 
 				i += batch_size
 
 				# output = transformer(src_seq, src_pos, tgt_seq, tgt_pos)
 				# print (output[0, idx_to_monitor, idx_])
 
-		print("Epochs: ", str(ep)+"/"+str(n_epochs), "loss: ", av_loss/(files_cnt*(file_size/batch_size)))
+		print("Epochs: ", str(ep)+"/"+str(n_epochs), "loss: ", np.mean(list_losses))
 		
-		# validate the  model
-		validate_model(transformer, ontology_idx_tree, mesh_vocab, word_to_idx, mesh_to_idx, root)
+
+		if ep >= 2:
+			# validate the  model
+			validate_model(transformer, ontology_idx_tree, mesh_vocab, word_to_idx, mesh_to_idx, root)
 
 		# save the learned model
 		if save_model:
@@ -365,7 +368,7 @@ def main():
 		mesh_vocab[idx] = mesh
 
 	fi = os.listdir('../data/bioasq_dataset/train_batches/')
-	train_fi = rd.sample(fi, 2)
+	train_fi = rd.sample(fi, 20)
 
 	if os.path.isfile("../data/subsampled_train_fi_names.pkl"):
 		train_fi = pickle.load(open("../data/subsampled_train_fi_names.pkl", 'rb'))
@@ -382,7 +385,6 @@ def main():
 	ontology_idx_tree = create_idx_ontology_tree()
 	root = [n for n,d in ontology_idx_tree.in_degree() if d==0] [0]
 	print ("Ontolgy tree created with # Nodes: ", len(ontology_idx_tree.nodes()))
-
 
 	# Define values for all the parameters
 	d_word_vec = 512 
@@ -409,8 +411,8 @@ def main():
 	# mseloss = nn.MSELoss(reduction="none")
 	# loss_criterion= nn.BCELoss(reduction="none")
 	loss_criterion = torch.nn.BCEWithLogitsLoss(reduction="none")
-	# optimizer = torch.optim.Adam(transformer.parameters(), lr=learning_rate, betas=(0.9,0.999))
-	optimizer = torch.optim.SGD(transformer.parameters(), lr=learning_rate)
+	optimizer = torch.optim.Adam(transformer.parameters(), lr=learning_rate, betas=(0.9,0.999))
+	# optimizer = torch.optim.SGD(transformer.parameters(), lr=learning_rate)
 	# load the saved model
 	if load_model and os.path.isfile('../saved_models/model.pt'):
 		transformer.load_state_dict(torch.load('../saved_models/model.pt'))

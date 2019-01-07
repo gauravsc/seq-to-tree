@@ -177,7 +177,7 @@ class Transformer(nn.Module):
             n_layers=n_layers, n_head=n_head, d_k=d_k, d_v=d_v,
             dropout=dropout)
 
-        self.tgt_word_prj = nn.Linear(d_model, n_tgt_vocab, bias=False)
+        self.tgt_word_prj = nn.Linear(d_model, n_tgt_vocab, bias=True)
         nn.init.xavier_normal_(self.tgt_word_prj.weight)
 
         assert d_model == d_word_vec, \
