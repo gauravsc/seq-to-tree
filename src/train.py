@@ -266,6 +266,10 @@ def recursive_decoding(transformer, mesh_idx_seq, src_seq, src_pos, ontology_idx
 	# print (tgt_seq.shape, tgt_seq)
 	# print (tgt_pos.shape, tgt_pos)
 
+	# copy the tensors to gpu
+	tgt_seq = tgt_seq.to(in_device)
+	tgt_pos = tgt_pos.to(in_device)
+
 	# get output of the model 
 	output = transformer(src_seq, src_pos, tgt_seq, tgt_pos)
 
@@ -306,6 +310,10 @@ def predict(transformer, ontology_idx_tree, mesh_vocab, word_to_idx, mesh_to_idx
 		# reshape to create batch of size 1
 		src_seq = torch.tensor(src_seq.reshape((1,-1)))
 		src_pos = torch.tensor(src_pos.reshape((1,-1)))
+
+		# copy the tensor to gpu  
+		src_seq = src_seq.to(in_device)
+		src_pos = src_pos.to(in_device)
 
 		mesh_idx_seq = [1, root]
 		pred_for_one_doc = recursive_decoding(transformer, mesh_idx_seq, src_seq, src_pos, ontology_idx_tree)
