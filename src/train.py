@@ -234,7 +234,7 @@ def train(transformer, loss_criterion, optimizer, ontology_idx_tree, mesh_vocab,
 		print("Epochs: ", str(ep)+"/"+str(n_epochs), "loss: ", np.mean(list_losses))
 		
 
-		if ep >= 2:
+		if ep >= 0:
 			# validate the  model
 			validate_model(transformer, ontology_idx_tree, mesh_vocab, word_to_idx, mesh_to_idx, root)
 
@@ -419,15 +419,15 @@ def main():
 	# mseloss = nn.MSELoss(reduction="none")
 	# loss_criterion= nn.BCELoss(reduction="none")
 	loss_criterion = torch.nn.BCEWithLogitsLoss(reduction="none")
-	optimizer = torch.optim.Adam(transformer.parameters(), lr=learning_rate, betas=(0.9,0.999))
-	# optimizer = torch.optim.SGD(transformer.parameters(), lr=learning_rate)
+	# optimizer = torch.optim.Adam(transformer.parameters(), lr=learning_rate, betas=(0.1,0.999))
+	optimizer = torch.optim.SGD(transformer.parameters(), lr=learning_rate)
 	# load the saved model
 	if load_model and os.path.isfile('../saved_models/model.pt'):
 		transformer.load_state_dict(torch.load('../saved_models/model.pt'))
 		print ("Done loading the saved model .....")
 
+	# train the model 
 	if train_model:
-		# train the model 
 		transformer = transformer.train()
 		transformer = train(transformer, loss_criterion, optimizer, ontology_idx_tree, mesh_vocab, word_to_idx, mesh_to_idx, root, train_fi)
 	
@@ -435,7 +435,6 @@ def main():
 	# if save_model:
 	# 	torch.save(transformer.state_dict(), '../saved_models/model.pt')
 
-	
 	# validate the model
 	validate_model(transformer, ontology_idx_tree, mesh_vocab, word_to_idx, mesh_to_idx, root)
 
