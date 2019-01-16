@@ -20,7 +20,7 @@ tgt_max_seq_len = 20
 learning_rate = 0.005
 threshold = 0.5
 n_train_iterations = 1400
-save_model = True
+save_model = False
 load_model = True
 train_model = True
 batch_size = 240
@@ -395,9 +395,12 @@ def main():
 	print ("Ontolgy tree created with # Nodes: ", len(ontology_idx_tree.nodes()))
 
 	# Define values for all the parameters
-	d_word_vec = 512 
-	d_model = 512
-	d_inner = 1024
+	# d_word_vec = 512 
+	# d_model = 512
+	# d_inner = 1024
+	d_word_vec = 128 
+	d_model = 128
+	d_inner = 128
 	n_layers = 2
 	n_head = 4
 	d_k = 64
