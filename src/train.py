@@ -17,14 +17,14 @@ from eval.eval import *
 vocab_size = 250000
 src_max_seq_len = 1000
 tgt_max_seq_len = 20
-learning_rate = 0.005
+learning_rate = 0.01
 threshold = 0.5
 n_train_iterations = 1400
-save_model = False
+save_model = True
 load_model = True
 train_model = True
 batch_size = 240
-clip_norm = 5.0
+clip_norm = 10.0
 max_batch_size = 16
 in_device = torch.device("cuda:0")
 out_device = torch.device("cuda:0")
@@ -155,6 +155,8 @@ def train(transformer, loss_criterion, optimizer, ontology_idx_tree, mesh_vocab,
 
 	for ep in range(n_epochs):
 		list_losses = [] 
+		# shuffle the list of files in each epoch
+		rd.shuffle(files)
 		for it, file in enumerate(files):
 
 			file_data = json.load(open('../data/bioasq_dataset/train_batches/'+file,'r'))
@@ -395,12 +397,12 @@ def main():
 	print ("Ontolgy tree created with # Nodes: ", len(ontology_idx_tree.nodes()))
 
 	# Define values for all the parameters
-	# d_word_vec = 512 
-	# d_model = 512
-	# d_inner = 1024
-	d_word_vec = 128 
-	d_model = 128
-	d_inner = 128
+	d_word_vec = 512 
+	d_model = 512
+	d_inner = 1024
+	# d_word_vec = 128 
+	# d_model = 128
+	# d_inner = 128
 	n_layers = 2
 	n_head = 4
 	d_k = 64

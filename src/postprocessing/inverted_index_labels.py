@@ -37,10 +37,16 @@ for fi in files:
 		ndoc += 1
 
 
+for label in inverted_idx.keys():
+	inverted_idx[label] = list(inverted_idx[label])
+
+json.dump(list_of_abstracts, open('../data/bioasq_dataset/list_of_abstracts.json', 'w', encoding="utf8", errors='ignore'))
+json.dump(inverted_idx, open('../data/bioasq_dataset/label_inverted_idx.json', 'w', encoding="utf8", errors='ignore'))
 
 
 print (len(list_of_abstracts))
-print (inverted_idx)
+print (len(inverted_idx))
+
 
 
 

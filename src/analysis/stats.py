@@ -11,6 +11,7 @@ import pickle
 
 # dictionary for keeping label counts
 label_cnt = {}
+seq_cnt = 0
 # getting the training files	
 files = os.listdir('../data/bioasq_dataset/train_batches/')
 for fi in files:
@@ -20,6 +21,7 @@ for fi in files:
 	
 	abstracts = data['abs']
 	list_of_labels = data['labels']
+	seq_cnt += np.sum([len(seq) for seq in data['tgt']])
 	n_abstracts = len(abstracts)
 
 	for labels in list_of_labels:
@@ -31,7 +33,7 @@ for fi in files:
 
 n_labels = sum(list(label_cnt.values()))
 
-print ("Total # of labels: ", n_labels, "Max # of any one label: ", np.max(list(label_cnt.values())))
+print ("Total # of labels: ", n_labels, "Max # of any one label: ", np.max(list(label_cnt.values())), "# of sequences: ", seq_cnt)
 
 for label in label_cnt.keys():
 	label_cnt[label] = label_cnt[label]/float(n_labels)
