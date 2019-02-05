@@ -24,11 +24,16 @@ save_model = True
 load_model = True
 train_model = True
 batch_size = 240
-clip_norm = 10.0
+clip_norm = 20.0
 max_batch_size = 16
 in_device = torch.device("cuda:0")
 out_device = torch.device("cuda:0")
 n_epochs = 100
+
+# init depth-wise weights
+depth_weights = np.log2(np.arange(1, tgt_max_seq_len+1))
+depth_weights = torch.tensor(depth_weights/np.sum(depth_weights))
+
 # set random seed
 rd.seed(9001)
 
@@ -175,7 +180,7 @@ def train(transformer, loss_criterion, optimizer, ontology_idx_tree, mesh_vocab,
 				tgt_pos_full = torch.tensor(tgt_pos)
 				mask_tensor_full = torch.tensor(mask_tensor, dtype=torch.float)
 
-				for rs in range(int((batch_size*15)/max_batch_size)):
+				for rs in range(int((0.2*batch_size*15)/max_batch_size)):
 
 					# fix the max size of the batch 
 					ind = np.random.choice(src_seq_full.shape[0], max_batch_size, replace=False)
@@ -207,6 +212,8 @@ def train(transformer, loss_criterion, optimizer, ontology_idx_tree, mesh_vocab,
 
 					loss = loss_criterion(output, target)
 					loss = loss*mask_tensor
+					loss = torch.sum(loss, dim=(0,1))
+					loss = loss*depth_weights
 					loss = torch.sum(loss)/torch.sum(mask_tensor)
 
 					print("loss: ", loss)
@@ -235,7 +242,6 @@ def train(transformer, loss_criterion, optimizer, ontology_idx_tree, mesh_vocab,
 
 		print("Epochs: ", str(ep)+"/"+str(n_epochs), "loss: ", np.mean(list_losses))
 		
-
 		if ep >= 0:
 			# validate the  model
 			validate_model(transformer, ontology_idx_tree, mesh_vocab, word_to_idx, mesh_to_idx, root)
@@ -245,7 +251,6 @@ def train(transformer, loss_criterion, optimizer, ontology_idx_tree, mesh_vocab,
 			torch.save(transformer.state_dict(), '../saved_models/model.pt')
 
 					
-				
 	return transformer
 
 
@@ -378,12 +383,17 @@ def main():
 		mesh_vocab[idx] = mesh
 
 	fi = os.listdir('../data/bioasq_dataset/train_batches/')
-	train_fi = rd.sample(fi, 20)
+	train_fi = rd.sample(fi, 200)
 
 	if os.path.isfile("../data/subsampled_train_fi_names.pkl"):
 		train_fi = pickle.load(open("../data/subsampled_train_fi_names.pkl", 'rb'))
 	else:
 		pickle.dump(train_fi, open("../data/subsampled_train_fi_names.pkl", 'wb'))
+
+	# init depth-wise weights
+	weights = np.log2(np.arange(1, tgt_max_seq_len+1))
+	weights = torch.tensor(weights/np.sum(weights))
+
 
 	# # read source word embedding matrix
 	# src_emb = read_embeddings('../data/embeddings/word.processed.embeddings', src_vocab)
