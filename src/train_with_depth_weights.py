@@ -17,13 +17,13 @@ from eval.eval import *
 vocab_size = 250000
 src_max_seq_len = 1000
 tgt_max_seq_len = 20
-learning_rate = 0.01
+learning_rate = 0.005
 threshold = 0.5
 n_train_iterations = 1400
 save_model = True
 load_model = True
 train_model = True
-batch_size = 240
+batch_size = 480
 clip_norm = 20.0
 max_batch_size = 16
 in_device = torch.device("cuda:0")
@@ -167,6 +167,7 @@ def train(transformer, loss_criterion, optimizer, ontology_idx_tree, mesh_vocab,
 
 			file_data = json.load(open('../data/bioasq_dataset/train_batches/'+file,'r'))
 			file_size = len(file_data['abs'])
+			print ("New file loaded ....")
 			
 			i = 0
 			while i < file_size:
@@ -214,8 +215,13 @@ def train(transformer, loss_criterion, optimizer, ontology_idx_tree, mesh_vocab,
 					loss = loss_criterion(output, target)
 					loss = loss*mask_tensor
 					
-					loss = torch.sum(loss, dim=(0,1))
-					loss = loss*depth_weights
+					loss = torch.sum(loss, dim=(1))
+					mask_tensor = torch.sum(mask_tensor, dim=(1))
+					loss = loss/mask_tensor
+
+					loss = torch.mean(loss, dim=(0))
+					
+					loss = loss * depth_weights
 					loss = torch.sum(loss)
 					
 					# loss = torch.sum(loss)/torch.sum(mask_tensor)
@@ -252,7 +258,7 @@ def train(transformer, loss_criterion, optimizer, ontology_idx_tree, mesh_vocab,
 
 		# save the learned model
 		if save_model:
-			torch.save(transformer.state_dict(), '../saved_models/model.pt')
+			torch.save(transformer.state_dict(), '../saved_models/with_weights_model.pt')
 
 					
 	return transformer
@@ -440,8 +446,8 @@ def main():
 	# optimizer = torch.optim.Adam(transformer.parameters(), lr=learning_rate, betas=(0.1,0.999))
 	optimizer = torch.optim.SGD(transformer.parameters(), lr=learning_rate)
 	# load the saved model
-	if load_model and os.path.isfile('../saved_models/model.pt'):
-		transformer.load_state_dict(torch.load('../saved_models/model.pt'))
+	if load_model and os.path.isfile('../saved_models/with_weights_model.pt'):
+		transformer.load_state_dict(torch.load('../saved_models/with_weights_model.pt'))
 		print ("Done loading the saved model .....")
 
 	# train the model 
